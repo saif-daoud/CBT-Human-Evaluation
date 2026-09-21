@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
-  Cloud,
   FileText,
   GraduationCap,
   KeyRound,
@@ -16,7 +15,6 @@ import {
   LogOut,
   Mail,
   Save,
-  ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -69,7 +67,6 @@ export default function App() {
   const [ratings, setRatings] = useState(() => loadJson(STORAGE_KEYS.ratings, []).map(normalizeRating));
   const [assignment, setAssignment] = useState(() => loadJson(STORAGE_KEYS.assignment, null));
   const [nextStatus, setNextStatus] = useState("idle");
-  const [syncStatus, setSyncStatus] = useState("Checking secure storage…");
   const nextRequestRef = useRef(false);
   const deployedMode = typeof window !== "undefined" && window.location.hostname.endsWith("github.io");
 
@@ -93,7 +90,6 @@ export default function App() {
         if (cancelled) return;
         setApiBase(config?.apiBase || config?.api_base || "");
         setStudy(payload);
-        setSyncStatus(config?.apiBase ? "Secure Cloudflare storage connected" : deployedMode ? "Cloudflare storage is not configured" : "Local testing mode");
         setRuntimeLoaded(true);
       })
       .catch((error) => {
@@ -149,7 +145,6 @@ export default function App() {
       await loadRemoteHistory(result.token);
       const nextProfile = { ...result.profile, participant_id: result.participant_id, email: normalizedEmail };
       setProfile(nextProfile);
-      setSyncStatus("Secure Cloudflare storage connected");
       go(ROUTES.welcome);
       return { existing: true };
     }
@@ -185,7 +180,6 @@ export default function App() {
       normalized.participant_id = result.participant_id;
       localStorage.setItem(STORAGE_KEYS.token, result.token);
       await loadRemoteHistory(result.token);
-      setSyncStatus("Secure Cloudflare storage connected");
     } else {
       if (deployedMode) throw new Error("Cloudflare storage is not configured for this deployment. Please contact the study team.");
       await verifyLocalAccessCode(accessCode);
@@ -214,7 +208,6 @@ export default function App() {
       if (!next) go(ROUTES.complete);
     } catch (error) {
       setNextStatus("error");
-      setSyncStatus(`Could not load the next session: ${error?.message || "request failed"}`);
     } finally {
       nextRequestRef.current = false;
     }
@@ -240,7 +233,6 @@ export default function App() {
 
     if (apiEnabled()) {
       await postJSON("/api/rating", { token: localStorage.getItem(STORAGE_KEYS.token), rating });
-      setSyncStatus("Rating saved securely");
     }
     setRatings((current) => [...current.filter((item) => item.session_id !== rating.session_id), rating]);
     localStorage.removeItem(`${STORAGE_KEYS.draftPrefix}${assignment.id}`);
@@ -258,11 +250,11 @@ export default function App() {
   }
 
   if (loadError) return <StatusPage eyebrow="Data error" title="The study could not be loaded." detail={loadError} danger />;
-  if (!study || !runtimeLoaded) return <StatusPage eyebrow="Loading" title="Preparing the CTRS review…" detail="Loading the anonymous session set and secure storage connection." loading />;
-  if (!profile || route === ROUTES.access) return <AccessPage cloudMode={apiEnabled()} deployedMode={deployedMode} onAccess={handleAccess} onProfile={handleProfile} />;
+  if (!study || !runtimeLoaded) return <StatusPage eyebrow="Loading" title="Preparing the CTRS review…" detail="Loading the session set." loading />;
+  if (!profile || route === ROUTES.access) return <AccessPage onAccess={handleAccess} onProfile={handleProfile} />;
 
   return (
-    <AppShell profile={profile} route={route} completed={completedStrata} total={study.stratumCount} syncStatus={syncStatus} onLogout={logout}>
+    <AppShell profile={profile} route={route} completed={completedStrata} total={study.stratumCount} onLogout={logout}>
       {route === ROUTES.welcome && <WelcomePage study={study} completed={completedStrata} onStart={() => go(ROUTES.review)} />}
       {route === ROUTES.review && (
         <ReviewPage
@@ -280,7 +272,7 @@ export default function App() {
   );
 }
 
-function AppShell({ profile, route, completed, total, syncStatus, onLogout, children }) {
+function AppShell({ profile, route, completed, total, onLogout, children }) {
   const progress = total ? Math.round((completed / total) * 100) : 0;
   return (
     <div className="appShell">
@@ -299,7 +291,6 @@ function AppShell({ profile, route, completed, total, syncStatus, onLogout, chil
           <button className="navButton" type="button" onClick={onLogout}><LogOut size={17} /> Exit</button>
         </nav>
       </header>
-      <div className="syncStrip"><Cloud size={15} /><span>{syncStatus}</span></div>
       {children}
     </div>
   );
@@ -317,7 +308,7 @@ function StatusPage({ eyebrow, title, detail, loading, danger }) {
   );
 }
 
-function AccessPage({ cloudMode, deployedMode, onAccess, onProfile }) {
+function AccessPage({ onAccess, onProfile }) {
   const [step, setStep] = useState("gate");
   const [gate, setGate] = useState({ email: "", access_code: "" });
   const [profile, setProfile] = useState({ email: "", access_code: "", name: "", role: "", institution: "", latest_degree: "", years_experience: "" });
@@ -384,7 +375,6 @@ function AccessPage({ cloudMode, deployedMode, onAccess, onProfile }) {
             </div>
           </form>
         )}
-        <div className="accessMode"><ShieldCheck size={17} />{cloudMode ? "Responses are stored in the study's Cloudflare database." : deployedMode ? "Secure storage has not been configured. Contact the study team." : "Local testing mode: responses remain in this browser."}</div>
         {status && <div className="statusBanner error" role="alert">{status}</div>}
       </section>
     </main>
@@ -403,10 +393,9 @@ function WelcomePage({ study, completed, onStart }) {
         <div className="heroPanel">
           <div className="eyebrow">Your task</div>
           <h1>Rate simulated CBT sessions with the CTRS.</h1>
-          <p className="heroCopy">Read each full transcript and score the therapist on all 11 Cognitive Therapy Rating Scale items. The therapist method and patient simulator are hidden throughout the study.</p>
+          <p className="heroCopy">Read each full transcript and score the therapist on all 11 Cognitive Therapy Rating Scale items.</p>
           <div className="heroActions">
             <button className="primaryAction" type="button" onClick={onStart}>{remaining ? <ArrowRight size={18} /> : <CheckCircle2 size={18} />}{remaining ? `${completed ? "Continue" : "Begin"} review` : "View completion"}</button>
-            <span>{remaining} anonymous {remaining === 1 ? "session" : "sessions"} remaining</span>
           </div>
         </div>
         <aside className="scalePanel">
@@ -415,11 +404,8 @@ function WelcomePage({ study, completed, onStart }) {
         </aside>
       </section>
       <section className="instructionGrid">
-        <article><span className="instructionNumber">01</span><h2>Use the entire session</h2><p>Judge the therapist's demonstrated skill while taking the apparent difficulty of the patient into account.</p></article>
-        <article><span className="instructionNumber">02</span><h2>Score every item</h2><p>Even-numbered anchors are shown with each criterion. Use 1, 3, or 5 when performance falls between adjacent anchors.</p></article>
-        <article><span className="instructionNumber">03</span><h2>Balanced assignment</h2><p>You receive at most one session from each hidden method–simulator pair. The least-evaluated pair and session are selected first.</p></article>
+        <article><span className="instructionNumber">01</span><h2>Use the entire session and score every item</h2><p>Judge the therapist's demonstrated skill while taking the apparent difficulty of the patient into account. Even-numbered anchors are shown with each criterion; use 1, 3, or 5 when performance falls between adjacent anchors.</p></article>
       </section>
-      <section className="privacyNote"><ShieldCheck size={21} /><div><strong>Blinded evaluation</strong><p>Session labels are anonymous. Please score only what is observable in the transcript and avoid trying to infer the generating system.</p></div></section>
     </main>
   );
 }
@@ -469,23 +455,23 @@ function ReviewPage({ study, assignment, session, completed, status, onRetry, on
     }
   }
 
-  if (status === "loading" || (!assignment && status === "idle")) return <StatusPage eyebrow="Balanced assignment" title="Selecting your next session…" detail="The least-covered eligible method–simulator pair is being selected." loading />;
+  if (status === "loading" || (!assignment && status === "idle")) return <StatusPage eyebrow="Next session" title="Selecting your next session…" detail="Preparing the session transcript." loading />;
   if (status === "error") return <main className="page"><section className="emptyPanel"><div className="eyebrow danger">Connection issue</div><h1>The next session could not be loaded.</h1><p>Your completed work is safe. Check the connection and try again.</p><button className="primaryAction" type="button" onClick={onRetry}>Try again</button></section></main>;
   if (!assignment || !session) return <main className="page"><section className="emptyPanel"><div className="eyebrow">Complete</div><h1>No eligible sessions remain.</h1></section></main>;
 
   return (
     <main className="reviewPage">
       <section className="reviewHeading">
-        <div><div className="eyebrow">Anonymous session {completed + 1} of {study.stratumCount}</div><h1>{session.label}</h1></div>
+        <div><div className="eyebrow">Session {completed + 1} of {study.stratumCount}</div><h1>{session.label}</h1></div>
         <div className="scoreSummary"><span>{answered}/11 scored</span><strong>{answered ? `${totalScore}/66` : "—/66"}</strong></div>
       </section>
       <div className="reviewGrid">
         <section className="transcriptPanel">
-          <div className="panelHeader"><div><span className="panelKicker">Session material</span><h2>Transcript</h2></div><span className="anonymousPill"><ShieldCheck size={14} /> Blinded</span></div>
+          <div className="panelHeader"><h2>Transcript</h2></div>
           <Transcript text={session.transcript} />
         </section>
         <section className="ratingPanel">
-          <div className="ratingIntro"><div><span className="panelKicker">CTRS score sheet</span><h2>Therapist ratings</h2></div><p>Select one score for every item. Open “Anchors” whenever you need the full even-numbered descriptions.</p></div>
+          <div className="ratingIntro"><div><span className="panelKicker">CTRS score sheet</span><h2>Therapist ratings</h2></div></div>
           <div className="criteriaList">
             {study.rubric.map((item, index) => {
               const previousPart = index ? study.rubric[index - 1].part : null;
@@ -515,13 +501,37 @@ function ReviewPage({ study, assignment, session, completed, status, onRetry, on
 }
 
 function Transcript({ text }) {
-  const lines = String(text || "").split(/\r?\n/).filter((line) => line.trim());
-  return <div className="transcript" aria-label="Therapy transcript">{lines.map((line, index) => {
+  const entries = [];
+  let startsNewParagraph = false;
+
+  for (const rawLine of String(text || "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      startsNewParagraph = true;
+      continue;
+    }
+
     const match = /^([^:]{1,30}):\s*(.*)$/.exec(line);
-    if (!match) return <p className="narration" key={index}>{line}</p>;
-    const speaker = match[1].trim();
-    const therapist = /^therapist$/i.test(speaker);
-    return <div className={therapist ? "utterance therapist" : "utterance patient"} key={index}><span>{speaker}</span><p>{match[2]}</p></div>;
+    if (match) {
+      entries.push({ speaker: match[1].trim(), paragraphs: match[2] ? [match[2].trim()] : [] });
+      startsNewParagraph = false;
+      continue;
+    }
+
+    const previous = entries.at(-1);
+    if (previous?.speaker) {
+      if (startsNewParagraph || !previous.paragraphs.length) previous.paragraphs.push(line);
+      else previous.paragraphs[previous.paragraphs.length - 1] += ` ${line}`;
+    } else {
+      entries.push({ speaker: "", paragraphs: [line] });
+    }
+    startsNewParagraph = false;
+  }
+
+  return <div className="transcript" aria-label="Therapy transcript">{entries.map((entry, index) => {
+    if (!entry.speaker) return <p className="narration" key={index}>{entry.paragraphs.join("\n\n")}</p>;
+    const therapist = /^therapist$/i.test(entry.speaker);
+    return <div className={therapist ? "utterance therapist" : "utterance patient"} key={index}><span>{entry.speaker}</span><p>{entry.paragraphs.join("\n\n")}</p></div>;
   })}</div>;
 }
 
