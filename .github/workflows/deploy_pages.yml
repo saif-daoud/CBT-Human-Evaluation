@@ -51,27 +51,7 @@ jobs:
 
           if [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] && [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${ACCESS_CODE_HASH:-}" ] && [ -n "${TOKEN_SECRET:-}" ]; then
             DB_NAME="ctrs_expert_rating"
-            DB_LIST="$(cd worker && npx wrangler d1 list --json)"
-            DB_ID="$(DB_LIST="$DB_LIST" DB_NAME="$DB_NAME" node -e 'const rows=JSON.parse(process.env.DB_LIST||"[]"); const list=Array.isArray(rows)?rows:(rows.result||rows.databases||[]); const match=list.find((row)=>row.name===process.env.DB_NAME); process.stdout.write(match?.uuid||match?.id||"")')"
-
-            if [ -z "$DB_ID" ]; then
-              DB_CREATE="$(cd worker && npx wrangler d1 create "$DB_NAME" --json)"
-              DB_ID="$(DB_CREATE="$DB_CREATE" node -e 'const payload=JSON.parse(process.env.DB_CREATE||"{}"); const row=Array.isArray(payload)?payload[0]:(payload.result||payload); process.stdout.write(row?.uuid||row?.id||row?.database_id||"")')"
-            fi
-
-            if [ -z "$DB_ID" ]; then
-              echo "Cloudflare D1 database ID could not be resolved." >&2
-              exit 1
-            fi
-
-            DB_ID="$DB_ID" ACCESS_CODE_HASH="$ACCESS_CODE_HASH" node - <<'NODE'
-            const fs = require("fs");
-            const file = "worker/wrangler.toml";
-            let text = fs.readFileSync(file, "utf8");
-            text = text.replace(/database_id = ".*"/, `database_id = "${process.env.DB_ID}"`);
-            text = text.replace(/ACCESS_CODE_HASHES = ".*"/, `ACCESS_CODE_HASHES = "${process.env.ACCESS_CODE_HASH}"`);
-            fs.writeFileSync(file, text);
-            NODE
+            ACCESS_CODE_HASH="$ACCESS_CODE_HASH" node -e 'const fs=require("fs"); const file="worker/wrangler.toml"; let text=fs.readFileSync(file,"utf8"); text=text.replace(/ACCESS_CODE_HASHES = ".*"/, `ACCESS_CODE_HASHES = "${process.env.ACCESS_CODE_HASH}"`); fs.writeFileSync(file,text)'
 
             (cd worker && npx wrangler d1 migrations apply "$DB_NAME" --remote)
             (cd worker && npx wrangler deploy 2>&1 | tee deploy.log)
@@ -94,15 +74,7 @@ jobs:
         shell: bash
         run: |
           API_BASE="${VITE_API_BASE_SECRET:-${DETECTED_WORKER_URL:-}}"
-          API_BASE="$API_BASE" node - <<'NODE'
-          const fs = require("fs");
-          fs.mkdirSync("public/data", { recursive: true });
-          fs.writeFileSync("public/data/runtime-config.json", `${JSON.stringify({
-            apiBase: process.env.API_BASE || "",
-            cloudflareRequired: true,
-            generatedAt: new Date().toISOString(),
-          }, null, 2)}\n`);
-          NODE
+          API_BASE="$API_BASE" node -e 'const fs=require("fs"); fs.mkdirSync("public/data",{recursive:true}); fs.writeFileSync("public/data/runtime-config.json", `${JSON.stringify({apiBase:process.env.API_BASE||"",cloudflareRequired:true,generatedAt:new Date().toISOString()},null,2)}\n`)'
 
       - name: Build GitHub Pages site
         env:
