@@ -1,0 +1,13 @@
+name = "ctrs-expert-rating-api"
+main = "src/index.js"
+compatibility_date = "2026-06-18"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ctrs_expert_rating"
+database_id = "eac2d287-3978-4091-8fe2-2cad3a929288"
+
+[vars]
+ALLOWED_ORIGINS = "https://saif-daoud.github.io,http://127.0.0.1:5173,http://localhost:5173"
+ACCESS_CODE_HASHES = "aa6d00688d8e7027c80454dade33a9570b44ea07987d961d6b1af3ac4780c1b0"

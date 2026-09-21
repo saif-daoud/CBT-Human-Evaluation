@@ -1,0 +1,15 @@
+{
+  "name": "ctrs-expert-rating-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --port 8787",
+    "migrate:local": "wrangler d1 migrations apply ctrs_expert_rating --local",
+    "migrate:remote": "wrangler d1 migrations apply ctrs_expert_rating --remote",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.54.0"
+  }
+}

@@ -1,0 +1,130 @@
+name: Deploy CTRS study
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            worker/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix worker ci
+
+      - name: Deploy Cloudflare Worker and migrate D1
+        id: worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCESS_CODE_HASH: ${{ secrets.ACCESS_CODE_HASH }}
+          TOKEN_SECRET: ${{ secrets.TOKEN_SECRET }}
+          ADMIN_EXPORT_TOKEN: ${{ secrets.ADMIN_EXPORT_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORKER_URL=""
+
+          if [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] && [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${ACCESS_CODE_HASH:-}" ] && [ -n "${TOKEN_SECRET:-}" ]; then
+            DB_NAME="ctrs_expert_rating"
+            DB_LIST="$(cd worker && npx wrangler d1 list --json)"
+            DB_ID="$(DB_LIST="$DB_LIST" DB_NAME="$DB_NAME" node -e 'const rows=JSON.parse(process.env.DB_LIST||"[]"); const list=Array.isArray(rows)?rows:(rows.result||rows.databases||[]); const match=list.find((row)=>row.name===process.env.DB_NAME); process.stdout.write(match?.uuid||match?.id||"")')"
+
+            if [ -z "$DB_ID" ]; then
+              DB_CREATE="$(cd worker && npx wrangler d1 create "$DB_NAME" --json)"
+              DB_ID="$(DB_CREATE="$DB_CREATE" node -e 'const payload=JSON.parse(process.env.DB_CREATE||"{}"); const row=Array.isArray(payload)?payload[0]:(payload.result||payload); process.stdout.write(row?.uuid||row?.id||row?.database_id||"")')"
+            fi
+
+            if [ -z "$DB_ID" ]; then
+              echo "Cloudflare D1 database ID could not be resolved." >&2
+              exit 1
+            fi
+
+            DB_ID="$DB_ID" ACCESS_CODE_HASH="$ACCESS_CODE_HASH" node - <<'NODE'
+            const fs = require("fs");
+            const file = "worker/wrangler.toml";
+            let text = fs.readFileSync(file, "utf8");
+            text = text.replace(/database_id = ".*"/, `database_id = "${process.env.DB_ID}"`);
+            text = text.replace(/ACCESS_CODE_HASHES = ".*"/, `ACCESS_CODE_HASHES = "${process.env.ACCESS_CODE_HASH}"`);
+            fs.writeFileSync(file, text);
+            NODE
+
+            (cd worker && npx wrangler d1 migrations apply "$DB_NAME" --remote)
+            (cd worker && npx wrangler deploy 2>&1 | tee deploy.log)
+            printf '%s' "$TOKEN_SECRET" | (cd worker && npx wrangler secret put TOKEN_SECRET)
+            if [ -n "${ADMIN_EXPORT_TOKEN:-}" ]; then
+              printf '%s' "$ADMIN_EXPORT_TOKEN" | (cd worker && npx wrangler secret put ADMIN_EXPORT_TOKEN)
+            fi
+
+            WORKER_URL="$(node -e 'const fs=require("fs"); const text=fs.readFileSync("worker/deploy.log","utf8"); const match=text.match(/https:\/\/[^\s]+\.workers\.dev/); process.stdout.write(match?match[0].replace(/[),.]+$/,""):"")')"
+          else
+            echo "Cloudflare secrets are incomplete; building Pages without a live API."
+          fi
+
+          echo "worker_url=$WORKER_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Write runtime configuration
+        env:
+          VITE_API_BASE_SECRET: ${{ secrets.VITE_API_BASE }}
+          DETECTED_WORKER_URL: ${{ steps.worker.outputs.worker_url }}
+        shell: bash
+        run: |
+          API_BASE="${VITE_API_BASE_SECRET:-${DETECTED_WORKER_URL:-}}"
+          API_BASE="$API_BASE" node - <<'NODE'
+          const fs = require("fs");
+          fs.mkdirSync("public/data", { recursive: true });
+          fs.writeFileSync("public/data/runtime-config.json", `${JSON.stringify({
+            apiBase: process.env.API_BASE || "",
+            cloudflareRequired: true,
+            generatedAt: new Date().toISOString(),
+          }, null, 2)}\n`);
+          NODE
+
+      - name: Build GitHub Pages site
+        env:
+          VITE_ACCESS_CODE_HASH: ${{ secrets.ACCESS_CODE_HASH }}
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
+        shell: bash
+        run: |
+          REPOSITORY_NAME="${GITHUB_REPOSITORY#*/}"
+          VITE_BASE_PATH="/${REPOSITORY_NAME}/" npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,8 @@
+node_modules
+dist
+.env.local
+.wrangler
+worker/node_modules
+worker/.dev.vars
+vite-dev*.log
+research/study-key.json
