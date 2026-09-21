@@ -462,7 +462,6 @@ function ReviewPage({ study, assignment, session, completed, status, onRetry, on
   return (
     <main className="reviewPage">
       <section className="reviewHeading">
-        <div><div className="eyebrow">Session {completed + 1} of {study.stratumCount}</div><h1>{session.label}</h1></div>
         <div className="scoreSummary"><span>{answered}/11 scored</span><strong>{answered ? `${totalScore}/66` : "—/66"}</strong></div>
       </section>
       <div className="reviewGrid">

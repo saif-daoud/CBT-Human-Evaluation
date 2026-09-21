@@ -219,7 +219,6 @@ function buildStudy() {
 
   const sessions = rawSessions.map((session) => ({
     id: sessionIdBySource.get(sessionSourceKey(session)),
-    label: `Session ${String(rawSessions.indexOf(session) + 1).padStart(3, "0")}`,
     stratumId: stratumIdByGroup.get(session.groupKey),
     transcript: session.transcript,
   }));
@@ -256,7 +255,6 @@ function buildStudy() {
     }),
     sessions: rawSessions.map((source, index) => ({
       session_id: sessions[index].id,
-      public_label: sessions[index].label,
       stratum_id: sessions[index].stratumId,
       profile_id: source.profileId,
       run_name: source.runName,

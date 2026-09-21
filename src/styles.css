@@ -129,8 +129,7 @@ h1, h2, h3, .brand { font-family: "Manrope", "DM Sans", sans-serif; }
 .instructionNumber { color: var(--coral); font-family: "Manrope", sans-serif; font-size: 13px; font-weight: 800; letter-spacing: 0.1em; }
 
 .reviewPage { width: min(1720px, 100%); margin: 0 auto; padding: 27px 24px 60px; }
-.reviewHeading { display: flex; justify-content: space-between; gap: 24px; align-items: flex-end; margin-bottom: 18px; }
-.reviewHeading h1 { margin: 5px 0 0; color: var(--teal-950); font-size: clamp(30px, 4vw, 46px); letter-spacing: -0.035em; }
+.reviewHeading { display: flex; justify-content: flex-end; margin-bottom: 18px; }
 .scoreSummary { display: flex; gap: 12px; align-items: center; color: var(--muted); font-size: 13px; font-weight: 700; }
 .scoreSummary strong { padding: 7px 11px; color: var(--teal-800); background: var(--teal-100); border-radius: 9px; font-family: "Manrope", sans-serif; font-size: 15px; }
 .reviewGrid { display: grid; grid-template-columns: minmax(600px, 1.55fr) minmax(430px, 0.95fr); gap: 14px; align-items: start; }
